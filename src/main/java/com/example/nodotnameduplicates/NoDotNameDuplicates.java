@@ -110,8 +110,9 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             }
         }
         // **FIXED LINE**
-        // Using getOfflinePlayerIfCached to avoid server lag and deprecation warnings.
-        return Bukkit.getOfflinePlayerIfCached(name);
+        // Reverting to the standard deprecated method, which is the only available fallback.
+        // The loop above minimizes its use to prevent performance issues.
+        return Bukkit.getOfflinePlayer(name);
     }
 
     private void syncIfNewer(File source, File target) {
