@@ -1,0 +1,31 @@
+name: Build Plugin
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v3
+
+      - name: ☕ Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: ⚙️ Build with Maven
+        run: mvn -B clean package
+
+      - name: 📦 Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoDotNameDuplicates
+          path: target/*.jar
+
