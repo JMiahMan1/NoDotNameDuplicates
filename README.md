@@ -35,7 +35,7 @@ A Spigot plugin that prevents Bedrock and Java players from logging in at the sa
 4. Copy the generated JAR from the `target/` directory into your server’s `plugins/` folder:
 
    ```
-   target/NoDotNameDuplicates-1.0.0.jar
+   target/NoDotNameDuplicates-1.0.6.jar
    ```
 
 5. Start your server. The plugin will generate a default `config.yml`.
@@ -51,12 +51,11 @@ debug: false
 
 linkedPlayers:
   Steve: BedrockSteve
-  Alice: .Alice
+  Alice: Super_Alice
 ```
 
 - `debug`: Enable or disable debug logging
-- `linkedPlayers`: Map a Java player name to its associated Bedrock counterpart. These names are case-insensitive.
-
+- `linkedPlayers`: Map a Java player name to its associated Bedrock counterpart. These names are case-insensitive and spaces are represented by an underscore (ie. Super Alice => Super_Alice).
 ---
 
 ## 🧠 How It Works
