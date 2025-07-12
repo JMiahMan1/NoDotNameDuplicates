@@ -1,5 +1,18 @@
+# NoDotNameDuplicates Configuration
+
 debug: false
 auto-whitelist: true
+
+# --- Linked Players ---
+# Manually link a Java name to a Bedrock name (without the prefix).
+# The Bedrock name should be the value, not the key.
 linkedPlayers:
-  Steve: BedrockSteve
-  Alice: bedrock_alice
+  JavaUser: BedrockUser
+  AnotherJava: AnotherBedrock
+  Steve: .Steve
+
+# --- Integrations ---
+# Enable or disable integration with other plugins.
+integrations:
+  towny:
+    enabled: true # Set to false to disable updating Towny resident files.

@@ -11,14 +11,15 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,7 +33,8 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     private boolean debug;
     private Map<String, String> linkedPlayers;
     private Path whitelistPath;
-    private boolean autoWhitelist; // New config option
+    private boolean autoWhitelist;
+    private boolean townyIntegrationEnabled; // Variable to hold the config setting
 
     @Override
     public void onEnable() {
@@ -50,14 +52,31 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             getLogger().severe("Could not create whitelist file: " + e.getMessage());
         }
 
+        // Register the main plugin's events
         getServer().getPluginManager().registerEvents(this, this);
+
+        // Conditionally register the Towny listener based on the config
+        if (this.townyIntegrationEnabled) {
+            if (Bukkit.getPluginManager().getPlugin("Towny") != null) {
+                log("Towny integration is enabled.");
+                getServer().getPluginManager().registerEvents(new TownyBridgeListener(this), this);
+            } else {
+                getLogger().warning("Towny integration was enabled in the config, but the Towny plugin was not found.");
+            }
+        } else {
+            log("Towny integration is disabled in the config.");
+        }
+
         log("Plugin enabled. Default world: " + defaultWorld.getName());
     }
 
     private void loadSettings() {
         FileConfiguration config = getConfig();
         this.debug = config.getBoolean("debug", false);
-        this.autoWhitelist = config.getBoolean("auto-whitelist", true); // Load new config option, default to true
+        this.autoWhitelist = config.getBoolean("auto-whitelist", true);
+        // Load the new setting from the config, defaulting to 'true'
+        this.townyIntegrationEnabled = config.getBoolean("integrations.towny.enabled", true);
+
         this.linkedPlayers = new HashMap<>();
         if (config.isConfigurationSection("linkedPlayers")) {
             for (String javaName : config.getConfigurationSection("linkedPlayers").getKeys(false)) {
@@ -68,11 +87,17 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             }
         }
     }
-
-    private void log(String msg) {
+    
+    // Public so the listener can access it
+    public void log(String msg) {
         if (debug) {
             getLogger().info("[DEBUG] " + msg);
         }
+    }
+
+    // Public so the listener can access it
+    public Map<String, String> getLinkedPlayers() {
+        return linkedPlayers;
     }
 
     private String normalizeName(String name) {
@@ -83,9 +108,13 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         return new File(defaultWorld.getWorldFolder(), "playerdata/" + uuid + ".dat");
     }
 
-    private UUID getUUIDFromName(String name) {
-        OfflinePlayer player = Bukkit.getOfflinePlayer(name);
-        return player != null ? player.getUniqueId() : null;
+    private OfflinePlayer getOfflinePlayerByName(String name) {
+        for (OfflinePlayer p : Bukkit.getOfflinePlayers()) {
+            if (p.getName() != null && p.getName().equalsIgnoreCase(name)) {
+                return p;
+            }
+        }
+        return Bukkit.getOfflinePlayer(name);
     }
 
     private void syncIfNewer(File source, File target) {
@@ -120,17 +149,16 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             }
         }
 
-        log("syncPlayerFiles: " + playerName + " → counterpart: " + counterpartName);
+        log("syncPlayerFiles: " + playerName + " -> counterpart: " + counterpartName);
 
-        UUID uuid1 = uuid;
-        UUID uuid2 = getUUIDFromName(counterpartName);
-        if (uuid2 == null) {
+        OfflinePlayer p2 = getOfflinePlayerByName(counterpartName);
+        if (p2 == null || p2.getUniqueId() == null) {
             log("No UUID found for counterpart " + counterpartName);
             return;
         }
 
-        File f1 = getPlayerDataFile(uuid1);
-        File f2 = getPlayerDataFile(uuid2);
+        File f1 = getPlayerDataFile(uuid);
+        File f2 = getPlayerDataFile(p2.getUniqueId());
 
         if (f1.exists() && f2.exists()) {
             syncBidirectional(f1, f2);
@@ -155,11 +183,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             boolean isSameBaseName = joiningBase.equalsIgnoreCase(onlineBase);
             boolean isManualLinkConflict = (
                 (linkedPlayers.containsKey(joiningBase) && linkedPlayers.get(joiningBase).equalsIgnoreCase(onlineBase)) ||
-                (linkedPlayers.containsKey(onlineBase) && linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase)) ||
-                (linkedPlayers.containsValue(joiningBase) && linkedPlayers.containsKey(onlineBase) &&
-                    linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase)) ||
-                (linkedPlayers.containsValue(onlineBase) && linkedPlayers.containsKey(joiningBase) &&
-                    linkedPlayers.get(joiningBase).equalsIgnoreCase(onlineBase))
+                (linkedPlayers.containsKey(onlineBase) && linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase))
             );
 
             if (isSameBaseName || isManualLinkConflict) {
@@ -170,9 +194,17 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         }
 
         UUID joiningUUID = event.getUniqueId();
-        Bukkit.getScheduler().runTask(this, () -> syncPlayerFiles(joiningName, joiningUUID));
+        Bukkit.getScheduler().runTask(this, () -> {
+            syncPlayerFiles(joiningName, joiningUUID);
 
-        if (joiningName.startsWith(".") && autoWhitelist) { // Check autoWhitelist config
+            Player loggingInPlayer = Bukkit.getPlayer(joiningUUID);
+            if (loggingInPlayer != null) {
+                PlayerDataSyncEvent syncEvent = new PlayerDataSyncEvent(loggingInPlayer);
+                Bukkit.getPluginManager().callEvent(syncEvent);
+            }
+        });
+
+        if (joiningName.startsWith(".") && autoWhitelist) {
             log("Processing Bedrock whitelist for " + joiningName);
             try {
                 addBedrockUserToWhitelistIfNeeded(joiningUUID, joiningName);
@@ -203,7 +235,6 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
 
     private void writeWhitelistJson(JSONArray jsonArray) throws IOException {
         Files.write(whitelistPath, jsonArray.toString(2).getBytes(StandardCharsets.UTF_8));
-        // Reload whitelist after writing if it's enabled on the server
         if (Bukkit.getServer().hasWhitelist()) {
             Bukkit.getServer().reloadWhitelist();
             log("Whitelist reloaded due to update.");
@@ -225,8 +256,6 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         Set<String> whitelistUsernames = getWhitelistUsernames(whitelistJson);
 
         String usernameLower = bedrockUsername.toLowerCase();
-
-        // Only add Bedrock user if they appear in linkedPlayers map (either side)
         boolean allowedByLinkedPlayers = linkedPlayers.containsKey(usernameLower) || linkedPlayers.containsValue(usernameLower);
 
         if (!allowedByLinkedPlayers) {
@@ -243,7 +272,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         newEntry.put("uuid", bedrockUuid.toString());
         newEntry.put("name", bedrockUsername);
         whitelistJson.put(newEntry);
-        writeWhitelistJson(whitelistJson); // This will now trigger the whitelist reload
+        writeWhitelistJson(whitelistJson);
 
         log("Added Bedrock user '" + bedrockUsername + "' to JSON whitelist.");
     }
