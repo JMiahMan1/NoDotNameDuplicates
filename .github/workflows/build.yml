@@ -63,3 +63,13 @@ jobs:
 
           # Create tag and release via GitHub CLI
           gh release create "$TAG" --title "$TAG" --notes-file changelog.txt
+
+          # Upload JAR file(s) to the release
+          JAR_FILE=$(find target -name "*.jar" | head -n 1)
+          if [ -f "$JAR_FILE" ]; then
+            echo "Uploading JAR file: $JAR_FILE"
+            gh release upload "$TAG" "$JAR_FILE"
+          else
+            echo "No .jar file found in target/"
+            exit 1
+          fi
