@@ -7,7 +7,7 @@
 
     <groupId>com.example.nodotnameduplicates</groupId>
     <artifactId>NoDotNameDuplicates</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.7</version>
     <name>NoDotNameDuplicates</name>
 
     <repositories>
