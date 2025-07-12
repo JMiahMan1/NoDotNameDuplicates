@@ -112,7 +112,6 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         String baseName = normalizeName(playerName);
         String counterpartName = playerName.startsWith(".") ? baseName : "." + baseName;
 
-        // Override counterpart if linkedPlayers config has a custom mapping
         for (Map.Entry<String, String> entry : linkedPlayers.entrySet()) {
             if (entry.getKey().equalsIgnoreCase(baseName)) {
                 counterpartName = entry.getValue();
@@ -121,9 +120,14 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             }
         }
 
+        log("syncPlayerFiles: " + playerName + " → counterpart: " + counterpartName);
+
         UUID uuid1 = uuid;
         UUID uuid2 = getUUIDFromName(counterpartName);
-        if (uuid2 == null) return;
+        if (uuid2 == null) {
+            log("No UUID found for counterpart " + counterpartName);
+            return;
+        }
 
         File f1 = getPlayerDataFile(uuid1);
         File f2 = getPlayerDataFile(uuid2);
@@ -142,24 +146,25 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         String joiningName = event.getName();
         String joiningBase = normalizeName(joiningName);
 
+        log("onPreLogin triggered for: " + joiningName);
+
         for (Player online : Bukkit.getOnlinePlayers()) {
             String onlineName = online.getName();
             String onlineBase = normalizeName(onlineName);
 
             boolean isSameBaseName = joiningBase.equalsIgnoreCase(onlineBase);
-
             boolean isManualLinkConflict = (
-                    (linkedPlayers.containsKey(joiningBase) && linkedPlayers.get(joiningBase).equalsIgnoreCase(onlineBase)) ||
-                    (linkedPlayers.containsKey(onlineBase) && linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase)) ||
-                    (linkedPlayers.containsValue(joiningBase) && linkedPlayers.containsKey(onlineBase) &&
-                            linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase)) ||
-                    (linkedPlayers.containsValue(onlineBase) && linkedPlayers.containsKey(joiningBase) &&
-                            linkedPlayers.get(joiningBase).equalsIgnoreCase(onlineBase))
+                (linkedPlayers.containsKey(joiningBase) && linkedPlayers.get(joiningBase).equalsIgnoreCase(onlineBase)) ||
+                (linkedPlayers.containsKey(onlineBase) && linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase)) ||
+                (linkedPlayers.containsValue(joiningBase) && linkedPlayers.containsKey(onlineBase) &&
+                    linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase)) ||
+                (linkedPlayers.containsValue(onlineBase) && linkedPlayers.containsKey(joiningBase) &&
+                    linkedPlayers.get(joiningBase).equalsIgnoreCase(onlineBase))
             );
 
             if (isSameBaseName || isManualLinkConflict) {
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                        "Another account linked to you is already online.");
+                    "Another account linked to you is already online.");
                 return;
             }
         }
@@ -167,8 +172,8 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         UUID joiningUUID = event.getUniqueId();
         Bukkit.getScheduler().runTask(this, () -> syncPlayerFiles(joiningName, joiningUUID));
 
-        // New: add Bedrock user to JSON whitelist if applicable
         if (joiningName.startsWith(".")) {
+            log("Processing Bedrock whitelist for " + joiningName);
             try {
                 addBedrockUserToWhitelistIfNeeded(joiningUUID, joiningName);
             } catch (IOException e) {
@@ -205,9 +210,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         for (int i = 0; i < whitelistJson.length(); i++) {
             JSONObject entry = whitelistJson.getJSONObject(i);
             String name = entry.optString("name", "").toLowerCase();
-            if (!name.isEmpty()) {
-                set.add(name);
-            }
+            if (!name.isEmpty()) set.add(name);
         }
         return set;
     }
@@ -220,27 +223,35 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
 
     private void addBedrockUserToWhitelistIfNeeded(UUID bedrockUuid, String bedrockUsername) throws IOException {
         JSONArray whitelistJson = readWhitelistJson();
-        if (whitelistJson.isEmpty()) return;
-
         Set<String> whitelistUsernames = getWhitelistUsernames(whitelistJson);
         Set<String> configWhitelist = getConfigWhitelist();
 
+        if (configWhitelist.isEmpty()) {
+            log("Config whitelist empty; skipping Bedrock add.");
+            return;
+        }
+
         String usernameLower = bedrockUsername.toLowerCase();
 
-        boolean allowedByConfig = configWhitelist.contains(usernameLower) ||
-                (usernameLower.startsWith(".") && configWhitelist.contains(usernameLower.substring(1)));
+        boolean allowedByConfig = configWhitelist.contains(usernameLower)
+            || (usernameLower.startsWith(".") && configWhitelist.contains(usernameLower.substring(1)));
 
-        if (!allowedByConfig) return;
+        if (!allowedByConfig) {
+            log("Bedrock user " + bedrockUsername + " not allowed by config whitelist.");
+            return;
+        }
 
-        if (whitelistUsernames.contains(usernameLower)) return;
+        if (whitelistUsernames.contains(usernameLower)) {
+            log("Bedrock user " + bedrockUsername + " already in whitelist JSON.");
+            return;
+        }
 
         JSONObject newEntry = new JSONObject();
         newEntry.put("uuid", bedrockUuid.toString());
         newEntry.put("name", bedrockUsername);
         whitelistJson.put(newEntry);
-
         writeWhitelistJson(whitelistJson);
 
-        log("Added Bedrock user '" + bedrockUsername + "' to whitelist JSON file.");
+        log("Added Bedrock user '" + bedrockUsername + "' to JSON whitelist.");
     }
 }
