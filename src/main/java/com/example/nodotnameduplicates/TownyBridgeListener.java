@@ -43,7 +43,9 @@ public class TownyBridgeListener implements Listener {
             }
         }
         
-        Path townyFile = Paths.get(plugin.getDataFolder().getParent().getAbsolutePath(),
+        // **FIXED LINE**
+        // Changed .getParent() to .getParentFile() to get a File object before calling getAbsolutePath()
+        Path townyFile = Paths.get(plugin.getDataFolder().getParentFile().getAbsolutePath(),
                                 "Towny", "data", "residents", javaName + ".txt");
 
         if (!Files.exists(townyFile)) {

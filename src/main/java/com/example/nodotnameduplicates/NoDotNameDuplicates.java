@@ -34,7 +34,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     private Map<String, String> linkedPlayers;
     private Path whitelistPath;
     private boolean autoWhitelist;
-    private boolean townyIntegrationEnabled; // Variable to hold the config setting
+    private boolean townyIntegrationEnabled;
 
     @Override
     public void onEnable() {
@@ -52,10 +52,8 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             getLogger().severe("Could not create whitelist file: " + e.getMessage());
         }
 
-        // Register the main plugin's events
         getServer().getPluginManager().registerEvents(this, this);
 
-        // Conditionally register the Towny listener based on the config
         if (this.townyIntegrationEnabled) {
             if (Bukkit.getPluginManager().getPlugin("Towny") != null) {
                 log("Towny integration is enabled.");
@@ -74,7 +72,6 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         FileConfiguration config = getConfig();
         this.debug = config.getBoolean("debug", false);
         this.autoWhitelist = config.getBoolean("auto-whitelist", true);
-        // Load the new setting from the config, defaulting to 'true'
         this.townyIntegrationEnabled = config.getBoolean("integrations.towny.enabled", true);
 
         this.linkedPlayers = new HashMap<>();
@@ -88,14 +85,12 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         }
     }
     
-    // Public so the listener can access it
     public void log(String msg) {
         if (debug) {
             getLogger().info("[DEBUG] " + msg);
         }
     }
 
-    // Public so the listener can access it
     public Map<String, String> getLinkedPlayers() {
         return linkedPlayers;
     }
@@ -114,7 +109,9 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
                 return p;
             }
         }
-        return Bukkit.getOfflinePlayer(name);
+        // **FIXED LINE**
+        // Using getOfflinePlayerIfCached to avoid server lag and deprecation warnings.
+        return Bukkit.getOfflinePlayerIfCached(name);
     }
 
     private void syncIfNewer(File source, File target) {
