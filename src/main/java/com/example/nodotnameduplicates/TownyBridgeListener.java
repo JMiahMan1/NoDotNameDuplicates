@@ -42,7 +42,7 @@ public class TownyBridgeListener implements Listener {
                 }
             }
         }
-        
+
         // **FIXED LINE**
         // Changed .getParent() to .getParentFile() to get a File object before calling getAbsolutePath()
         Path townyFile = Paths.get(plugin.getDataFolder().getParentFile().getAbsolutePath(),
