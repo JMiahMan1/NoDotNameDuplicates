@@ -22,11 +22,9 @@ import java.nio.file.*;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 public class NoDotNameDuplicates extends JavaPlugin implements Listener {
 
@@ -215,29 +213,17 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         return set;
     }
 
-    private Set<String> getConfigWhitelist() {
-        List<String> list = getConfig().getStringList("whitelist");
-        if (list == null) return Set.of();
-        return list.stream().map(String::toLowerCase).collect(Collectors.toSet());
-    }
-
     private void addBedrockUserToWhitelistIfNeeded(UUID bedrockUuid, String bedrockUsername) throws IOException {
         JSONArray whitelistJson = readWhitelistJson();
         Set<String> whitelistUsernames = getWhitelistUsernames(whitelistJson);
-        Set<String> configWhitelist = getConfigWhitelist();
-
-        if (configWhitelist.isEmpty()) {
-            log("Config whitelist empty; skipping Bedrock add.");
-            return;
-        }
 
         String usernameLower = bedrockUsername.toLowerCase();
 
-        boolean allowedByConfig = configWhitelist.contains(usernameLower)
-            || (usernameLower.startsWith(".") && configWhitelist.contains(usernameLower.substring(1)));
+        // Only add Bedrock user if they appear in linkedPlayers map (either side)
+        boolean allowedByLinkedPlayers = linkedPlayers.containsKey(usernameLower) || linkedPlayers.containsValue(usernameLower);
 
-        if (!allowedByConfig) {
-            log("Bedrock user " + bedrockUsername + " not allowed by config whitelist.");
+        if (!allowedByLinkedPlayers) {
+            log("Bedrock user " + bedrockUsername + " not allowed by linkedPlayers map.");
             return;
         }
 
