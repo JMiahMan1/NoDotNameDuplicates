@@ -41,7 +41,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         loadSettings();
         this.defaultWorld = Bukkit.getWorlds().get(0);
 
-        whitelistPath = Paths.get(getDataFolder().getAbsolutePath(), "whitelist.json");
+        whitelistPath = Paths.get(getDataFolder().getAbsolutePath(), "../whitelist.json");
         try {
             if (!Files.exists(whitelistPath)) {
                 Files.createDirectories(whitelistPath.getParent());
