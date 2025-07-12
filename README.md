@@ -19,20 +19,20 @@ A Spigot plugin that prevents Bedrock and Java players from logging in at the sa
 ## 📦 Installation
 
 1. **Install GeyserMC** on your Java server to support Bedrock players.
-2. Download or clone this plugin source:
+2. Download [latest Jar](https://github.com/JMiahMan1/NoDotNameDuplicates/releases/download/latest/NoDotNameDuplicates-latest.jar) file or clone this plugin source:
 
    ```bash
    git clone https://github.com/your-username/NoDotNameDuplicates.git
    cd NoDotNameDuplicates
    ```
 
-3. Compile with Maven (requires Java 17+):
+3. If compiling, compile with Maven (requires Java 17+):
 
    ```bash
    mvn clean package
    ```
 
-4. Copy the generated JAR from the `target/` directory into your server’s `plugins/` folder:
+4. Copy the generated JAR from the `target/` directory (or from the download link) into your server’s `plugins/` folder:
 
    ```
    target/NoDotNameDuplicates-1.0.6.jar
