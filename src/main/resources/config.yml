@@ -1,5 +1,5 @@
 debug: false
-
+auto-whitelist: true
 linkedPlayers:
   Steve: BedrockSteve
   Alice: bedrock_alice

@@ -32,6 +32,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     private boolean debug;
     private Map<String, String> linkedPlayers;
     private Path whitelistPath;
+    private boolean autoWhitelist; // New config option
 
     @Override
     public void onEnable() {
@@ -56,6 +57,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     private void loadSettings() {
         FileConfiguration config = getConfig();
         this.debug = config.getBoolean("debug", false);
+        this.autoWhitelist = config.getBoolean("auto-whitelist", true); // Load new config option, default to true
         this.linkedPlayers = new HashMap<>();
         if (config.isConfigurationSection("linkedPlayers")) {
             for (String javaName : config.getConfigurationSection("linkedPlayers").getKeys(false)) {
@@ -170,7 +172,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         UUID joiningUUID = event.getUniqueId();
         Bukkit.getScheduler().runTask(this, () -> syncPlayerFiles(joiningName, joiningUUID));
 
-        if (joiningName.startsWith(".")) {
+        if (joiningName.startsWith(".") && autoWhitelist) { // Check autoWhitelist config
             log("Processing Bedrock whitelist for " + joiningName);
             try {
                 addBedrockUserToWhitelistIfNeeded(joiningUUID, joiningName);
@@ -201,6 +203,11 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
 
     private void writeWhitelistJson(JSONArray jsonArray) throws IOException {
         Files.write(whitelistPath, jsonArray.toString(2).getBytes(StandardCharsets.UTF_8));
+        // Reload whitelist after writing if it's enabled on the server
+        if (Bukkit.getServer().hasWhitelist()) {
+            Bukkit.getServer().reloadWhitelist();
+            log("Whitelist reloaded due to update.");
+        }
     }
 
     private Set<String> getWhitelistUsernames(JSONArray whitelistJson) {
@@ -236,7 +243,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         newEntry.put("uuid", bedrockUuid.toString());
         newEntry.put("name", bedrockUsername);
         whitelistJson.put(newEntry);
-        writeWhitelistJson(whitelistJson);
+        writeWhitelistJson(whitelistJson); // This will now trigger the whitelist reload
 
         log("Added Bedrock user '" + bedrockUsername + "' to JSON whitelist.");
     }
