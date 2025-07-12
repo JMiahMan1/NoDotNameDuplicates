@@ -36,14 +36,22 @@ jobs:
 
       - name: Create Git Tag
         id: tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${{ steps.get_version.outputs.version }}
           TAG="v$VERSION"
           echo "Tag: $TAG"
+
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+
+          # Use authenticated HTTPS URL to push
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+
           git tag "$TAG"
           git push origin "$TAG"
+
           echo "tag_name=$TAG" >> $GITHUB_OUTPUT
 
       - name: Generate Changelog
