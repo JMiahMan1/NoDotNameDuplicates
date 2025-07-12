@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required to access all tags for changelog
+          fetch-depth: 0  # Needed for accessing full git history
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -21,8 +21,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install xml parser
-        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+      - name: Install XML tools
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils gh
 
       - name: Extract version from pom.xml
         id: get_version
@@ -34,46 +34,32 @@ jobs:
       - name: Build with Maven
         run: mvn -B package --file pom.xml
 
-      - name: Create Git Tag
-        id: tag
+      - name: Authenticate GitHub CLI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+
+      - name: Create GitHub Tag and Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          VERSION=${{ steps.get_version.outputs.version }}
           TAG="v$VERSION"
-          echo "Tag: $TAG"
 
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          # Exit if the tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Skipping release."
+            exit 0
+          fi
 
-          # Use authenticated HTTPS URL to push
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+          echo "Creating release for $TAG"
 
-          git tag "$TAG"
-          git push origin "$TAG"
-
-          echo "tag_name=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Generate Changelog
-        id: changelog
-        run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ || echo "")
-          echo "Last tag: $LAST_TAG"
+          # Generate changelog from commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
             CHANGELOG=$(git log --pretty=format:"- %s")
           else
             CHANGELOG=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s")
           fi
-          echo "$CHANGELOG"
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag_name }}
-          name: Release ${{ steps.tag.outputs.tag_name }}
-          body: ${{ steps.changelog.outputs.changelog }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "$CHANGELOG" > changelog.txt
+
+          # Create tag and release via GitHub CLI
+          gh release create "$TAG" --title "$TAG" --notes-file changelog.txt
