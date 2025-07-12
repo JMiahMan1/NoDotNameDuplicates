@@ -73,3 +73,20 @@ jobs:
             echo "No .jar file found in target/"
             exit 1
           fi
+
+          # Create or update 'latest' tag to point to HEAD (overwrite if exists)
+          if git rev-parse "$LATEST_TAG" >/dev/null 2>&1; then
+            git tag -d "$LATEST_TAG"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/$LATEST_TAG"
+          fi
+          git tag "$LATEST_TAG"
+          git push origin "$LATEST_TAG" --force
+
+          # Create or update 'latest' release
+          if gh release view "$LATEST_TAG" >/dev/null 2>&1; then
+            echo "Updating existing 'latest' release"
+            gh release upload --clobber "$LATEST_TAG" "$JAR_FILE"
+          else
+            echo "Creating new 'latest' release"
+            gh release create "$LATEST_TAG" --title "latest" --notes "Latest release" "$JAR_FILE"
+          fi
