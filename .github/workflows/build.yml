@@ -70,8 +70,11 @@ jobs:
           if [ -f "$JAR_FILE" ]; then
             echo "Uploading JAR file: $JAR_FILE"
             gh release upload "$TAG" "$JAR_FILE"
+            mv "$JAR_FILE" "target/NoDotNameDuplicates-latest.jar"
+            LATEST_JAR_FILE="target/NoDotNameDuplicates-latest.jar"
           else
             echo "No .jar file found in target/"
+            LATEST_JAR_FILE=""
             exit 1
           fi
 
@@ -86,8 +89,8 @@ jobs:
           # Create or update 'latest' release
           if gh release view "$LATEST_TAG" >/dev/null 2>&1; then
             echo "Updating existing 'latest' release"
-            gh release upload --clobber "$LATEST_TAG" "$JAR_FILE"
+            gh release upload --clobber "$LATEST_TAG" "$LATEST_JAR_FILE"
           else
             echo "Creating new 'latest' release"
-            gh release create "$LATEST_TAG" --title "latest" --notes "Latest release" "$JAR_FILE"
+            gh release create "$LATEST_TAG" --title "latest" --notes "Latest release" "$LATEST_JAR_FILE"
           fi
