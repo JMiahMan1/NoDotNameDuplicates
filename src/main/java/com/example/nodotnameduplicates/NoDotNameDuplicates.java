@@ -109,9 +109,6 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
                 return p;
             }
         }
-        // **FIXED LINE**
-        // Reverting to the standard deprecated method, which is the only available fallback.
-        // The loop above minimizes its use to prevent performance issues.
         return Bukkit.getOfflinePlayer(name);
     }
 
@@ -197,6 +194,8 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
 
             Player loggingInPlayer = Bukkit.getPlayer(joiningUUID);
             if (loggingInPlayer != null) {
+                // --- ADDED LOGGING ---
+                log("Firing PlayerDataSyncEvent for " + loggingInPlayer.getName() + "...");
                 PlayerDataSyncEvent syncEvent = new PlayerDataSyncEvent(loggingInPlayer);
                 Bukkit.getPluginManager().callEvent(syncEvent);
             }
