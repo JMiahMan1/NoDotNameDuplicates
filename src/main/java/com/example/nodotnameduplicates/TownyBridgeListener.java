@@ -29,7 +29,7 @@ public class TownyBridgeListener implements Listener {
         plugin.log("Executing Towny reload...");
         // Schedules the command to run on the main server thread
         Bukkit.getScheduler().runTask(plugin, () -> 
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ta reload")
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ta reload all")
         );
     }
 
