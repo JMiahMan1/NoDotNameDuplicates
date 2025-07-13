@@ -42,9 +42,10 @@ public class TownyBridgeListener implements Listener {
                 }
             }
         }
+        
+        // --- ADDED LOGGING ---
+        plugin.log("Towny bridge triggered by '" + playerName + "'. Checking resident file for '" + javaName + "'.");
 
-        // **FIXED LINE**
-        // Changed .getParent() to .getParentFile() to get a File object before calling getAbsolutePath()
         Path townyFile = Paths.get(plugin.getDataFolder().getParentFile().getAbsolutePath(),
                                 "Towny", "data", "residents", javaName + ".txt");
 
@@ -67,7 +68,7 @@ public class TownyBridgeListener implements Listener {
 
             if (updated) {
                 Files.write(townyFile, lines, StandardCharsets.UTF_8);
-                plugin.log("Updated Towny resident file for " + javaName + " with UUID from " + playerName);
+                plugin.log("Successfully updated Towny resident file for '" + javaName + "' with UUID from '" + playerName + "'.");
             }
 
         } catch (IOException e) {
