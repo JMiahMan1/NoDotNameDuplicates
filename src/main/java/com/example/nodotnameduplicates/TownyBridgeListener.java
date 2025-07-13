@@ -1,5 +1,6 @@
 package com.example.nodotnameduplicates;
 
+import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.entity.Player;
@@ -9,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.UUID;
 
 public class TownyBridgeListener implements Listener {
 
@@ -24,12 +24,20 @@ public class TownyBridgeListener implements Listener {
         Player loggingInPlayer = event.getLoggingInPlayer();
         updateTownyResidentFile(loggingInPlayer);
     }
+    
+    private void reloadTownyData() {
+        plugin.log("Executing Towny reload...");
+        // Schedules the command to run on the main server thread
+        Bukkit.getScheduler().runTask(plugin, () -> 
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ta reload")
+        );
+    }
 
     private void updateTownyResidentFile(Player player) {
         String playerName = player.getName();
         String javaName = playerName;
 
-        // If it's a bedrock player, get their Java counterpart name
+        // If it's a bedrock player, get their correctly-cased Java counterpart name
         if (playerName.startsWith(".")) {
             javaName = plugin.getCounterpartName(playerName);
         }
@@ -50,8 +58,12 @@ public class TownyBridgeListener implements Listener {
 
             for (int i = 0; i < lines.size(); i++) {
                 if (lines.get(i).trim().toLowerCase().startsWith("uuid=")) {
-                    lines.set(i, "uuid=" + player.getUniqueId().toString());
-                    updated = true;
+                    // Only update if the UUID is different
+                    String existingUuid = lines.get(i).substring(lines.get(i).indexOf("=") + 1).trim();
+                    if (!existingUuid.equalsIgnoreCase(player.getUniqueId().toString())) {
+                        lines.set(i, "uuid=" + player.getUniqueId().toString());
+                        updated = true;
+                    }
                     break;
                 }
             }
@@ -59,6 +71,8 @@ public class TownyBridgeListener implements Listener {
             if (updated) {
                 Files.write(townyFile, lines, StandardCharsets.UTF_8);
                 plugin.log("✅ Successfully updated Towny resident file for '" + javaName + "' with UUID from '" + playerName + "'.");
+                // Reload Towny data after the update
+                reloadTownyData();
             }
 
         } catch (IOException e) {
