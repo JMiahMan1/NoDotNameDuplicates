@@ -22,7 +22,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -111,6 +110,24 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         }
         return Bukkit.getOfflinePlayer(name);
     }
+    
+    public String getCounterpartName(String playerName) {
+        String baseName = normalizeName(playerName);
+        boolean isBedrock = playerName.startsWith(".");
+
+        for (Map.Entry<String, String> entry : linkedPlayers.entrySet()) {
+            String javaName = entry.getKey();
+            String bedrockName = entry.getValue();
+
+            if (isBedrock && bedrockName.equalsIgnoreCase(baseName)) {
+                return javaName;
+            }
+            if (!isBedrock && javaName.equalsIgnoreCase(baseName)) {
+                return "." + bedrockName;
+            }
+        }
+        return isBedrock ? baseName : "." + baseName;
+    }
 
     private void syncIfNewer(File source, File target) {
         try {
@@ -133,17 +150,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     }
 
     private void syncPlayerFiles(String playerName, UUID uuid) {
-        String baseName = normalizeName(playerName);
-        String counterpartName = playerName.startsWith(".") ? baseName : "." + baseName;
-
-        for (Map.Entry<String, String> entry : linkedPlayers.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(baseName)) {
-                counterpartName = entry.getValue();
-            } else if (entry.getValue().equalsIgnoreCase(baseName)) {
-                counterpartName = entry.getKey();
-            }
-        }
-
+        String counterpartName = getCounterpartName(playerName);
         log("syncPlayerFiles: " + playerName + " -> counterpart: " + counterpartName);
 
         OfflinePlayer p2 = getOfflinePlayerByName(counterpartName);
@@ -167,55 +174,45 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         String joiningName = event.getName();
-        String joiningBase = normalizeName(joiningName);
-
         log("onPreLogin triggered for: " + joiningName);
 
+        // This check must remain synchronous to prevent kick bypasses
         for (Player online : Bukkit.getOnlinePlayers()) {
-            String onlineName = online.getName();
-            String onlineBase = normalizeName(onlineName);
-
-            boolean isSameBaseName = joiningBase.equalsIgnoreCase(onlineBase);
-            boolean isManualLinkConflict = (
-                (linkedPlayers.containsKey(joiningBase) && linkedPlayers.get(joiningBase).equalsIgnoreCase(onlineBase)) ||
-                (linkedPlayers.containsKey(onlineBase) && linkedPlayers.get(onlineBase).equalsIgnoreCase(joiningBase))
-            );
-
-            if (isSameBaseName || isManualLinkConflict) {
+            String counterpartName = getCounterpartName(joiningName);
+            if (online.getName().equalsIgnoreCase(counterpartName)) {
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                     "Another account linked to you is already online.");
                 return;
-            }
-        }
-
-        UUID joiningUUID = event.getUniqueId();
-        Bukkit.getScheduler().runTask(this, () -> {
-            syncPlayerFiles(joiningName, joiningUUID);
-
-            Player loggingInPlayer = Bukkit.getPlayer(joiningUUID);
-            if (loggingInPlayer != null) {
-                // --- ADDED LOGGING ---
-                log("Firing PlayerDataSyncEvent for " + loggingInPlayer.getName() + "...");
-                PlayerDataSyncEvent syncEvent = new PlayerDataSyncEvent(loggingInPlayer);
-                Bukkit.getPluginManager().callEvent(syncEvent);
-            }
-        });
-
-        if (joiningName.startsWith(".") && autoWhitelist) {
-            log("Processing Bedrock whitelist for " + joiningName);
-            try {
-                addBedrockUserToWhitelistIfNeeded(joiningUUID, joiningName);
-            } catch (IOException e) {
-                getLogger().warning("Failed to update whitelist for Bedrock user " + joiningName + ": " + e.getMessage());
             }
         }
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            syncPlayerFiles(event.getPlayer().getName(), event.getPlayer().getUniqueId());
-        }, 40L);
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        String name = player.getName();
+        
+        // Run sync and other tasks after the player has fully joined
+        Bukkit.getScheduler().runTask(this, () -> {
+            // Whitelist check
+            if (name.startsWith(".") && autoWhitelist) {
+                log("Processing Bedrock whitelist for " + name);
+                try {
+                    addBedrockUserToWhitelistIfNeeded(uuid, name);
+                } catch (IOException e) {
+                    getLogger().warning("Failed to update whitelist for Bedrock user " + name + ": " + e.getMessage());
+                }
+            }
+
+            // Data sync
+            syncPlayerFiles(name, uuid);
+
+            // Fire the event for bridges like Towny
+            log("Firing PlayerDataSyncEvent for " + name + "...");
+            PlayerDataSyncEvent syncEvent = new PlayerDataSyncEvent(player);
+            Bukkit.getPluginManager().callEvent(syncEvent);
+        });
     }
 
     @EventHandler
@@ -226,8 +223,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     }
 
     private JSONArray readWhitelistJson() throws IOException {
-        String content = new String(Files.readAllBytes(whitelistPath), StandardCharsets.UTF_8);
-        return new JSONArray(content);
+        return new JSONArray(new String(Files.readAllBytes(whitelistPath), StandardCharsets.UTF_8));
     }
 
     private void writeWhitelistJson(JSONArray jsonArray) throws IOException {
@@ -247,20 +243,23 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         }
         return set;
     }
-
+    
     private void addBedrockUserToWhitelistIfNeeded(UUID bedrockUuid, String bedrockUsername) throws IOException {
-        JSONArray whitelistJson = readWhitelistJson();
-        Set<String> whitelistUsernames = getWhitelistUsernames(whitelistJson);
+        String baseName = normalizeName(bedrockUsername);
+        boolean allowedByLinkedPlayers = false;
 
-        String usernameLower = bedrockUsername.toLowerCase();
-        boolean allowedByLinkedPlayers = linkedPlayers.containsKey(usernameLower) || linkedPlayers.containsValue(usernameLower);
+        // Check if the Bedrock user's base name is a value in the linkedPlayers map
+        if (linkedPlayers.containsValue(baseName)) {
+            allowedByLinkedPlayers = true;
+        }
 
         if (!allowedByLinkedPlayers) {
-            log("Bedrock user " + bedrockUsername + " not allowed by linkedPlayers map.");
+            log("Bedrock user " + bedrockUsername + " not found in linkedPlayers map. Whitelist check skipped.");
             return;
         }
 
-        if (whitelistUsernames.contains(usernameLower)) {
+        JSONArray whitelistJson = readWhitelistJson();
+        if (getWhitelistUsernames(whitelistJson).contains(bedrockUsername.toLowerCase())) {
             log("Bedrock user " + bedrockUsername + " already in whitelist JSON.");
             return;
         }

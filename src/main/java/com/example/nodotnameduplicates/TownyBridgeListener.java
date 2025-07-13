@@ -9,7 +9,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Map;
 import java.util.UUID;
 
 public class TownyBridgeListener implements Listener {
@@ -23,27 +22,18 @@ public class TownyBridgeListener implements Listener {
     @EventHandler
     public void onPlayerDataSync(PlayerDataSyncEvent event) {
         Player loggingInPlayer = event.getLoggingInPlayer();
-        updateTownyResidentFile(loggingInPlayer.getName(), loggingInPlayer.getUniqueId());
+        updateTownyResidentFile(loggingInPlayer);
     }
 
-    private String normalizeName(String name) {
-        return name.startsWith(".") ? name.substring(1).toLowerCase() : name.toLowerCase();
-    }
+    private void updateTownyResidentFile(Player player) {
+        String playerName = player.getName();
+        String javaName = playerName;
 
-    private void updateTownyResidentFile(String playerName, UUID loginUUID) {
-        String baseName = normalizeName(playerName);
-        String javaName = baseName;
-
+        // If it's a bedrock player, get their Java counterpart name
         if (playerName.startsWith(".")) {
-            for (Map.Entry<String, String> entry : plugin.getLinkedPlayers().entrySet()) {
-                if (entry.getValue().equalsIgnoreCase(baseName)) {
-                    javaName = entry.getKey();
-                    break;
-                }
-            }
+            javaName = plugin.getCounterpartName(playerName);
         }
         
-        // --- ADDED LOGGING ---
         plugin.log("Towny bridge triggered by '" + playerName + "'. Checking resident file for '" + javaName + "'.");
 
         Path townyFile = Paths.get(plugin.getDataFolder().getParentFile().getAbsolutePath(),
@@ -60,7 +50,7 @@ public class TownyBridgeListener implements Listener {
 
             for (int i = 0; i < lines.size(); i++) {
                 if (lines.get(i).trim().toLowerCase().startsWith("uuid=")) {
-                    lines.set(i, "uuid=" + loginUUID.toString());
+                    lines.set(i, "uuid=" + player.getUniqueId().toString());
                     updated = true;
                     break;
                 }
@@ -68,11 +58,11 @@ public class TownyBridgeListener implements Listener {
 
             if (updated) {
                 Files.write(townyFile, lines, StandardCharsets.UTF_8);
-                plugin.log("Successfully updated Towny resident file for '" + javaName + "' with UUID from '" + playerName + "'.");
+                plugin.log("✅ Successfully updated Towny resident file for '" + javaName + "' with UUID from '" + playerName + "'.");
             }
 
         } catch (IOException e) {
-            plugin.getLogger().severe("Failed to read or write Towny resident file for " + javaName + ": " + e.getMessage());
+            plugin.getLogger().severe("❌ Failed to read or write Towny resident file for " + javaName + ": " + e.getMessage());
         }
     }
 }
