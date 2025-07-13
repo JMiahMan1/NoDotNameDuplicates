@@ -79,7 +79,8 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             for (String javaName : config.getConfigurationSection("linkedPlayers").getKeys(false)) {
                 String bedrockName = config.getString("linkedPlayers." + javaName);
                 if (bedrockName != null) {
-                    linkedPlayers.put(javaName.toLowerCase(), bedrockName.toLowerCase());
+                    // Store the original-cased Java name (key) and lowercase Bedrock name (value)
+                    linkedPlayers.put(javaName, bedrockName.toLowerCase());
                 }
             }
         }
@@ -120,13 +121,16 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
             String javaName = entry.getKey();
             String bedrockName = entry.getValue();
 
+            // If a Bedrock player logs in, find their Java counterpart by matching the lowercase Bedrock name
             if (isBedrock && bedrockName.equalsIgnoreCase(baseName)) {
-                return javaName;
+                return javaName; // Return the original-cased Java name
             }
+            // If a Java player logs in, find their Bedrock counterpart by matching the Java name (case-insensitive)
             if (!isBedrock && javaName.equalsIgnoreCase(baseName)) {
-                return "." + bedrockName;
+                return "." + bedrockName; // Return the Bedrock name with a dot
             }
         }
+        // Fallback for unlinked accounts
         return isBedrock ? baseName : "." + baseName;
     }
 
@@ -177,7 +181,6 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         String joiningName = event.getName();
         log("onPreLogin triggered for: " + joiningName);
 
-        // This check must remain synchronous to prevent kick bypasses
         for (Player online : Bukkit.getOnlinePlayers()) {
             String counterpartName = getCounterpartName(joiningName);
             if (online.getName().equalsIgnoreCase(counterpartName)) {
@@ -194,9 +197,7 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
         UUID uuid = player.getUniqueId();
         String name = player.getName();
         
-        // Run sync and other tasks after the player has fully joined
         Bukkit.getScheduler().runTask(this, () -> {
-            // Whitelist check
             if (name.startsWith(".") && autoWhitelist) {
                 log("Processing Bedrock whitelist for " + name);
                 try {
@@ -206,10 +207,8 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
                 }
             }
 
-            // Data sync
             syncPlayerFiles(name, uuid);
 
-            // Fire the event for bridges like Towny
             log("Firing PlayerDataSyncEvent for " + name + "...");
             PlayerDataSyncEvent syncEvent = new PlayerDataSyncEvent(player);
             Bukkit.getPluginManager().callEvent(syncEvent);
@@ -247,14 +246,8 @@ public class NoDotNameDuplicates extends JavaPlugin implements Listener {
     
     private void addBedrockUserToWhitelistIfNeeded(UUID bedrockUuid, String bedrockUsername) throws IOException {
         String baseName = normalizeName(bedrockUsername);
-        boolean allowedByLinkedPlayers = false;
 
-        // Check if the Bedrock user's base name is a value in the linkedPlayers map
-        if (linkedPlayers.containsValue(baseName)) {
-            allowedByLinkedPlayers = true;
-        }
-
-        if (!allowedByLinkedPlayers) {
+        if (!linkedPlayers.containsValue(baseName)) {
             log("Bedrock user " + bedrockUsername + " not found in linkedPlayers map. Whitelist check skipped.");
             return;
         }
