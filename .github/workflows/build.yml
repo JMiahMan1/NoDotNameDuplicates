@@ -8,12 +8,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Needed for accessing full git history
+          fetch-depth: 0 # Needed for accessing git history
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -22,7 +21,7 @@ jobs:
           java-version: '17'
 
       - name: Install XML tools
-        run: sudo apt-get update && sudo apt-get install -y libxml2-utils gh
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
 
       - name: Extract version from pom.xml
         id: get_version
@@ -34,57 +33,55 @@ jobs:
       - name: Build with Maven
         run: mvn -B package --file pom.xml
 
-      - name: Authenticate GitHub CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
-
-      - name: Create GitHub Tag and Release
+      - name: Create GitHub Tag and Releases
         env:
-          VERSION: ${{ steps.get_version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Exit immediately if a command fails
+          set -e
 
-      run: |
-         # Exit immediately if a command fails, making the script safer.
-         set -e
+          # Define version variables
+          VERSION="${{ steps.get_version.outputs.version }}"
+          TAG="v$VERSION"
+          LATEST_TAG="latest"
 
-         TAG="v$VERSION"
-         LATEST_TAG="latest"
+          # Exit if the versioned tag already exists
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Skipping release."
+            exit 0
+          fi
 
-         # Exit if the versioned tag already exists
-         if git rev-parse "$TAG" >/dev/null 2>&1; then
-           echo "Tag $TAG already exists. Skipping release."
-           exit 0
-         fi
+          echo "Creating release for $TAG"
 
-         echo "Creating release for $TAG"
-  
-         # --- Versioned Release ---
-         # Generate changelog from commits since the last tag
-         LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-         if [ -z "$LAST_TAG" ]; then
-           CHANGELOG=$(git log --pretty=format:"- %s")
-         else
-           CHANGELOG=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s")
-         fi
-         echo "$CHANGELOG" > changelog.txt
+          # --- Versioned Release ---
+          # Generate changelog from commits since the last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s")
+          else
+            CHANGELOG=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s")
+          fi
+          echo "$CHANGELOG" > changelog.txt
 
-         # Create a PUBLISHED release using the tag.
-         # --draft=false overrides the repository setting that defaults new releases to drafts.
-         gh release create "$TAG" --title "$TAG" --notes-file changelog.txt --draft=false
+          # Create a published release using the tag
+          gh release create "$TAG" --title "$TAG" --notes-file changelog.txt --draft=false
 
-         # Upload JAR file to the new versioned release
-         JAR_FILE=$(find target -name "*.jar" | head -n 1)
-         if [ ! -f "$JAR_FILE" ]; then
-           echo "No .jar file found in target/"
-           exit 1
-         fi
-         echo "Uploading JAR file: $JAR_FILE"
-         gh release upload "$TAG" "$JAR_FILE"
+          # Find and upload the JAR file to the new release
+          JAR_FILE=$(find target -name "*.jar" | head -n 1)
+          if [ ! -f "$JAR_FILE" ]; then
+            echo "No .jar file found in target/"
+            exit 1
+          fi
+          echo "Uploading JAR file: $JAR_FILE"
+          gh release upload "$TAG" "$JAR_FILE"
 
-         # --- 'Latest' Release ---
-         # Delete the previous 'latest' release and its underlying git tag in one command.
-         echo "Deleting previous 'latest' release..."
-         gh release delete "$LATEST_TAG" --yes --cleanup-tag || echo "No previous 'latest' release to delete. Continuing."
+          # --- 'Latest' Release ---
+          # Delete the previous 'latest' release and its tag
+          echo "Deleting previous 'latest' release..."
+          gh release delete "$LATEST_TAG" --yes --cleanup-tag || echo "No previous 'latest' release to delete."
 
-         # Create the new 'latest' release, ensuring it is also PUBLISHED.
-         echo "Creating new published 'latest' release..."
-         gh release create "$LATEST_TAG" --title "Latest Release" --notes "Latest development build. See versioned releases for stability." --draft=false "$JAR_FILE"
-         echo "Successfully created and published releases."
+          # Create the new 'latest' release and upload the JAR
+          echo "Creating new 'latest' release..."
+          gh release create "$LATEST_TAG" --title "Latest Release" --notes "Latest development build. See versioned releases for stability." --draft=false "$JAR_FILE"
+          
+          echo "Successfully created releases."
